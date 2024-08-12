@@ -37,6 +37,7 @@ parser.add_argument('--harmful_train', type=str, default='data/harmful_prompts_t
 parser.add_argument('--safe_test', type=str, default='data/safe_prompts_test_insertion_erased.txt', help='File containing safe prompts for testing')
 parser.add_argument('--harmful_test', type=str, default='data/harmful_prompts_test.txt', help='File containing harmful prompts for testing')
 parser.add_argument('--save_path', type=str, default='models/distilbert_insertion.pt', help='Path to save the model')
+parser.add_argument("--epochs", type=int, default=10, help="number of training epochs")
 
 args = parser.parse_args()
 
@@ -139,7 +140,7 @@ loss_fn = nn.CrossEntropyLoss()
 # loss_fn = nn.NLLLoss()
 
 # number of training epochs
-epochs = 10
+epochs = args.epochs
 
 # function to train the model
 def train():
