@@ -37,6 +37,7 @@ parser.add_argument('--attack', type=str, default="gcg", choices=["gcg", "autoda
                     help='attack to defend against')
 parser.add_argument('--adv_prompts_dir', type=str, default="data",
                     help='directory containing adversarial prompts')
+parser.add_argument("--batch_size", type=int, default=10, help="batch size")
 
 # use adversarial prompt or not
 # parser.add_argument('--append-adv', action='store_true',
@@ -626,7 +627,7 @@ elif eval_type == "harmful":
 
     # Check if the prompts are harmful
     count_harmful = 0
-    batch_size = 10
+    batch_size = args.batch_size
     start_time = time.time()
     for i in range(0, num_prompts, batch_size):
         batch = prompts[i:i+batch_size]
