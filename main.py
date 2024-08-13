@@ -1,7 +1,7 @@
 import torch
 import transformers
 from transformers import AutoTokenizer
-from models import *
+# from models import *
 import os
 import time
 import json
