@@ -4,6 +4,7 @@
 
 ### Importing libraries
 import argparse
+from pathlib import Path
 import warnings
 import numpy as np
 import pandas as pd
@@ -277,6 +278,7 @@ if train_flag == True:
         #save the best model
         if validation_loss < best_validation_loss:
             best_validation_loss = validation_loss
+            Path(args.save_path).parent.mkdir(parents=True, exist_ok=True)
             torch.save(model.state_dict(), args.save_path)
             # torch.save(model.state_dict(), 'new_distillbert_saved_weights.pt')
         
