@@ -18,7 +18,7 @@ from grad_ec import grad_ec
 from greedy_ec import greedy_ec
 from greedy_grad_ec import greedy_grad_ec
 
-from openai import OpenAI
+# from openai import OpenAI
 
 parser = argparse.ArgumentParser(description='Check safety of prompts.')
 parser.add_argument('--num_prompts', type=int, default=2,
