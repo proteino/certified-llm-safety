@@ -315,6 +315,8 @@ path = args.save_path
 model.load_state_dict(torch.load(path))
 model.eval()
 
+torch.cuda.empty_cache()
+
 # get predictions for test data
 with torch.no_grad():
   preds = model(test_seq.to(device), test_mask.to(device))[0]
