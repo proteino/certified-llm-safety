@@ -1,4 +1,3 @@
-import transformers
 from transformers import DistilBertTokenizer, DistilBertForSequenceClassification
 from transformers.pipelines.pt_utils import KeyDataset
 from datasets import load_dataset, Dataset, concatenate_datasets
