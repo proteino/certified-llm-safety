@@ -21,6 +21,7 @@ parser.add_argument("--save_filename", type=str, default="distilbert.pt")
 parser.add_argument("--patience", type=int)
 parser.add_argument("--n_harmful", type=int)
 parser.add_argument("--n_safe", type=int)
+parser.add_argument("--progress_bar", action="store_true")
 
 
 args = parser.parse_args()
@@ -153,7 +154,8 @@ for epoch in range(num_epochs):
         preds = torch.argmax(outputs.logits, dim=-1)
         batch_accuracies.append(binary_accuracy(batch["labels"], preds).item())
         
-        progress_bar.update(1)
+        if args.progress_bar:
+            progress_bar.update(1)
     
     train_loss = total_train_loss / len(train_dataloader)
     train_losses.append(train_loss)
@@ -181,7 +183,6 @@ for epoch in range(num_epochs):
         preds = torch.argmax(outputs.logits, dim=-1)
         batch_accuracies.append(binary_accuracy(batch["labels"], preds).item())
         
-        # progress_bar.update(1)
         
     
     eval_loss = total_eval_loss / len(test_dataloader)
