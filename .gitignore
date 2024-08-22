@@ -1,4 +1,5 @@
 models
+plots
 logs
 misc.py
 __pycache__
