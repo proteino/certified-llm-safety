@@ -21,6 +21,7 @@ parser.add_argument("--save_filename", type=str, default="distilbert.pt")
 parser.add_argument("--patience", type=int)
 parser.add_argument("--n_harmful", type=int)
 parser.add_argument("--n_safe", type=int)
+parser.add_argument("--max_len", type=int, required=True)
 parser.add_argument("--progress_bar", action="store_true")
 
 
@@ -31,6 +32,7 @@ patience = args.patience
 seed = args.seed
 num_epochs = args.num_epochs
 learning_rate = args.learning_rate
+max_token_length = args.max_len
 batch_size = args.batch_size
 train_test_split = [0.9, 0.1]
 torch.manual_seed(seed)
@@ -91,7 +93,7 @@ fused_dataset = concatenate_datasets([harmful_prompts_dataset, safe_prompts_data
 del safe_prompts_dataset, harmful_prompts_dataset
 
 # tokenize dataset
-fused_dataset = fused_dataset.map(lambda datapoint: tokenizer(datapoint["prompt"], padding="max_length", truncation=True), batched=True)
+fused_dataset = fused_dataset.map(lambda datapoint: tokenizer(datapoint["prompt"], max_length=max_token_length, padding="max_length", truncation=True), batched=True)
 
 # remove prompts column
 fused_dataset = fused_dataset.remove_columns(["prompt"])
@@ -136,6 +138,7 @@ for epoch in range(num_epochs):
     for step, batch in enumerate(train_dataloader):
         # move batch to gpu
         batch = {k: v.to(device) for k, v in batch.items()}
+        
         
         # generate predictions
         outputs = model(**batch)
@@ -220,6 +223,7 @@ log["eval_losses"] = eval_losses
 log["eval_accuracies"] = eval_accuracies
 
 hyperparams = {
+    "max_token_length": max_token_length,
     "lr": learning_rate,
     "batch_size": batch_size,
     "num_epochs": num_epochs,
