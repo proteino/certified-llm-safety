@@ -27,7 +27,8 @@ tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
 model = DistilBertForSequenceClassification.from_pretrained('distilbert-base-uncased')
 
 # Load model weights
-path = kagglehub.model_download("grossjct/safety-filter-insertion/pyTorch/default", "distilbert_insertion-2.pt")
+# path = kagglehub.model_download("grossjct/safety-filter-insertion/pyTorch/default", "distilbert_insertion-2.pt")
+path = kagglehub.model_download("grossjct/prompt_classifier/pyTorch/default", "distilbert.pt")
 
 model.load_state_dict(torch.load(path, map_location=device))
 model.eval()
@@ -49,6 +50,7 @@ results = {"category": [],
            "n_prompts": [],
            "n_false": []}
 
+
 for category in categories:
     df_cat = df.loc[df['category'] == category]
     n = df_cat.shape[0]
@@ -59,7 +61,7 @@ for category in categories:
         if out["label"] != ground_truth:
             n_false += 1
     results["category"].append(category)
-    results["n"].append(n)
+    results["n_prompts"].append(n)
     results["n_false"].append(n_false)
 
     

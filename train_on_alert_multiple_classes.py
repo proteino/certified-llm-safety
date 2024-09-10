@@ -4,7 +4,7 @@ from datasets import load_dataset, Dataset, concatenate_datasets
 import torch
 from torch.utils.data import DataLoader
 from torch.optim import AdamW
-from torchmetrics.classification import BinaryAccuracy
+from torchmetrics.classification import BinaryAccuracy, MulticlassAccuracy
 import argparse
 from tqdm.auto import tqdm
 import json
@@ -53,20 +53,23 @@ if args.n_harmful and args.n_harmful < harmful_prompts_dataset.shape[0]:
     harmful_prompts_dataset = harmful_prompts_dataset.shuffle(seed=seed).select(range(args.n_harmful))
 
 n_harmful = harmful_prompts_dataset.shape[0]
-    
 
-#remove unused columns
-harmful_prompts_dataset = harmful_prompts_dataset.remove_columns(["category", "id"])
 
 # remove prefix and suffix
 data_frame = harmful_prompts_dataset.to_pandas()
 data_frame.prompt = data_frame.prompt.str.removeprefix("### Instruction:\n").str.removesuffix("\n### Response:\n")
+
+# turn categories into labels
+categories = data_frame.category.unique()
+category_to_label = {text: i + 1 for i, text in enumerate(categories)}
+label_to_category = {i+1: text for i, text in enumerate(categories)}
+num_classes = len(categories) + 1
+data_frame["labels"] = data_frame["category"].map(category_to_label)
 harmful_prompts_dataset = Dataset.from_pandas(data_frame)
 del data_frame
 
-# add label column, 0 -> harmful
-harmful_prompts_dataset = harmful_prompts_dataset.add_column("labels", [0] * harmful_prompts_dataset.shape[0])
-
+#remove unused columns
+harmful_prompts_dataset = harmful_prompts_dataset.remove_columns(["id", "category"])
 
 
 # load safe prompts dataset
@@ -84,8 +87,8 @@ n_safe = safe_prompts_dataset.shape[0]
 #remove unused columns and rename column
 safe_prompts_dataset = safe_prompts_dataset.remove_columns(["answer", "references"]).rename_column("question", "prompt")
 
-# add label column, 1 -> safe
-safe_prompts_dataset = safe_prompts_dataset.add_column("labels", [1] * safe_prompts_dataset.shape[0])
+# add label column, 0 -> safe
+safe_prompts_dataset = safe_prompts_dataset.add_column("labels", [0] * safe_prompts_dataset.shape[0])
 
 
 #fuse datasets and shuffle
@@ -123,7 +126,7 @@ eval_accuracies = []
 best_eval_loss = torch.inf
 n_stagnating_epochs = 0
 
-binary_accuracy = BinaryAccuracy().to(device)
+multiclass_accuracy = MulticlassAccuracy(num_classes=num_classes).to(device)
     
 
 for epoch in range(num_epochs):
@@ -155,7 +158,7 @@ for epoch in range(num_epochs):
         
         # compute accuracy
         preds = torch.argmax(outputs.logits, dim=-1)
-        batch_accuracies.append(binary_accuracy(batch["labels"], preds).item())
+        batch_accuracies.append(multiclass_accuracy(batch["labels"], preds).item())
         
         if args.progress_bar:
             progress_bar.update(1)
@@ -184,7 +187,7 @@ for epoch in range(num_epochs):
         
         # compute accuracy
         preds = torch.argmax(outputs.logits, dim=-1)
-        batch_accuracies.append(binary_accuracy(batch["labels"], preds).item())
+        batch_accuracies.append(multiclass_accuracy(batch["labels"], preds).item())
         
         
     
