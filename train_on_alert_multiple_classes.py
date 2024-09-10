@@ -37,11 +37,6 @@ batch_size = args.batch_size
 train_test_split = [0.9, 0.1]
 torch.manual_seed(seed)
 
-# Load the tokenizer
-tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
-
-# pass the pre-trained DistilBert to our define architecture
-model = DistilBertForSequenceClassification.from_pretrained('distilbert-base-uncased') #, num_labels=2)
 
 # load harmful prompts dataset
 harmful_prompts_dataset = load_dataset("Babelscape/ALERT", "alert", split="test") # ignore the split, dataset only has test split
@@ -94,6 +89,12 @@ safe_prompts_dataset = safe_prompts_dataset.add_column("labels", [0] * safe_prom
 #fuse datasets and shuffle
 fused_dataset = concatenate_datasets([harmful_prompts_dataset, safe_prompts_dataset]).shuffle(seed=seed)
 del safe_prompts_dataset, harmful_prompts_dataset
+
+# Load the tokenizer
+tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+
+# pass the pre-trained DistilBert to our define architecture
+model = DistilBertForSequenceClassification.from_pretrained('distilbert-base-uncased', num_labels=num_classes)
 
 # tokenize dataset
 fused_dataset = fused_dataset.map(lambda datapoint: tokenizer(datapoint["prompt"], max_length=max_token_length, padding="max_length", truncation=True), batched=True)
