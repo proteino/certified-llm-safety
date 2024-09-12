@@ -23,7 +23,7 @@ parser.add_argument("--n_harmful", type=int)
 parser.add_argument("--n_safe", type=int)
 parser.add_argument("--max_len", type=int, required=True)
 parser.add_argument("--progress_bar", action="store_true")
-parser.add_argument("--bert_version", type=str, choices=["distilbert, bert"], default="distilbert")
+parser.add_argument("--bert_version", type=str, choices=["distilbert", "bert"], default="distilbert")
 
 
 args = parser.parse_args()
