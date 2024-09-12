@@ -1,4 +1,4 @@
-from transformers import DistilBertTokenizer, DistilBertForSequenceClassification
+from transformers import DistilBertTokenizer, DistilBertForSequenceClassification, BertTokenizer, BertForSequenceClassification
 from transformers.pipelines.pt_utils import KeyDataset
 from datasets import load_dataset, Dataset, concatenate_datasets
 import torch
@@ -23,6 +23,8 @@ parser.add_argument("--n_harmful", type=int)
 parser.add_argument("--n_safe", type=int)
 parser.add_argument("--max_len", type=int, required=True)
 parser.add_argument("--progress_bar", action="store_true")
+parser.add_argument("--bert_version", type=str, choices=["distilbert, bert"], default="distilbert")
+
 
 
 args = parser.parse_args()
@@ -90,12 +92,20 @@ safe_prompts_dataset = safe_prompts_dataset.add_column("labels", [0] * safe_prom
 fused_dataset = concatenate_datasets([harmful_prompts_dataset, safe_prompts_dataset]).shuffle(seed=seed)
 del safe_prompts_dataset, harmful_prompts_dataset
 
-# Load the tokenizer
-tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+if args.bert_version == "distilbert":
 
-# pass the pre-trained DistilBert to our define architecture
-model = DistilBertForSequenceClassification.from_pretrained('distilbert-base-uncased', num_labels=num_classes)
+    # Load the tokenizer
+    tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
 
+    # pass the pre-trained DistilBert to our define architecture
+    model = DistilBertForSequenceClassification.from_pretrained('distilbert-base-uncased', num_labels=num_classes)
+else:
+    # Load the tokenizer
+    tokenizer = BertTokenizer.from_pretrained('google-bert/bert-base-uncased')
+
+    # pass the pre-trained DistilBert to our define architecture
+    model = BertForSequenceClassification.from_pretrained('google-bert/bert-base-uncased', num_labels=num_classes)
+    
 # tokenize dataset
 fused_dataset = fused_dataset.map(lambda datapoint: tokenizer(datapoint["prompt"], max_length=max_token_length, padding="max_length", truncation=True), batched=True)
 

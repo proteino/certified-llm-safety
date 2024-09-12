@@ -1,4 +1,4 @@
-from transformers import DistilBertTokenizer, DistilBertForSequenceClassification
+from transformers import DistilBertTokenizer, DistilBertForSequenceClassification, BertTokenizer, BertForSequenceClassification
 from transformers.pipelines.pt_utils import KeyDataset
 from datasets import load_dataset, Dataset, concatenate_datasets
 import torch
@@ -23,6 +23,7 @@ parser.add_argument("--n_harmful", type=int)
 parser.add_argument("--n_safe", type=int)
 parser.add_argument("--max_len", type=int, required=True)
 parser.add_argument("--progress_bar", action="store_true")
+parser.add_argument("--bert_version", type=str, choices=["distilbert, bert"], default="distilbert")
 
 
 args = parser.parse_args()
@@ -37,11 +38,19 @@ batch_size = args.batch_size
 train_test_split = [0.9, 0.1]
 torch.manual_seed(seed)
 
-# Load the tokenizer
-tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+if args.bert_version == "distilbert":
 
-# pass the pre-trained DistilBert to our define architecture
-model = DistilBertForSequenceClassification.from_pretrained('distilbert-base-uncased') #, num_labels=2)
+    # Load the tokenizer
+    tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+
+    # pass the pre-trained DistilBert to our define architecture
+    model = DistilBertForSequenceClassification.from_pretrained('distilbert-base-uncased') #, num_labels=2)
+else:
+    # Load the tokenizer
+    tokenizer = BertTokenizer.from_pretrained('google-bert/bert-base-uncased')
+
+    # pass the pre-trained DistilBert to our define architecture
+    model = BertForSequenceClassification.from_pretrained('google-bert/bert-base-uncased') #, num_labels=2)
 
 # load harmful prompts dataset
 harmful_prompts_dataset = load_dataset("Babelscape/ALERT", "alert", split="test") # ignore the split, dataset only has test split
