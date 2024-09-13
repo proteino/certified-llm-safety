@@ -1,7 +1,7 @@
 import gradio as gr
 from datasets import load_dataset
 from transformers import pipeline
-from transformers import DistilBertTokenizer, DistilBertForSequenceClassification
+from transformers import DistilBertTokenizer, DistilBertForSequenceClassification, BertTokenizer, BertForSequenceClassification
 from argparse import ArgumentParser
 import kagglehub
 import torch
@@ -10,12 +10,16 @@ parser = ArgumentParser()
 
 parser.add_argument("--device", "-d", type=str, choices=["mps", "cuda"])
 parser.add_argument("--categories", "-c", action="store_true")
+parser.add_argument("--distil", action="store_true")
 
 args = parser.parse_args()
 device = torch.device(args.device)
 
 if args.categories:
-    path = kagglehub.model_download("grossjct/prompt_classifier_cat/pyTorch/default", "distilbert.pt")
+    if args.distil:
+        path = kagglehub.model_download("grossjct/prompt_classifier_cat/pyTorch/default", "distilbert.pt")
+    else:
+        path = kagglehub.model_download("grossjct/bert_multiclass_prompt_classifier/pyTorch/default", "bert.pt")
     harmful_prompts_dataset = load_dataset("Babelscape/ALERT", "alert", split="test") # ignore the split, dataset only has test split
     data_frame = harmful_prompts_dataset.to_pandas()
     categories = data_frame.category.unique()
@@ -25,18 +29,31 @@ if args.categories:
     
     
 else:
-    # load model 
-    path = kagglehub.model_download("grossjct/prompt_classifier/pyTorch/default", "distilbert.pt")
+    # load model
+    if args.distil: 
+        path = kagglehub.model_download("grossjct/prompt_classifier/pyTorch/default", "distilbert.pt")
+    else:
+        path = kagglehub.model_download("grossjct/bert_binary_prompt_classifier/pyTorch/default", "bert.pt")
     n_labels = 2
     label_to_category = {
         "LABEL_0": "harmful",
         "LABEL_1": "safe"
     }
 
-model = DistilBertForSequenceClassification.from_pretrained('distilbert-base-uncased', num_labels=n_labels)
+
+if args.distil:
+    model = DistilBertForSequenceClassification.from_pretrained('distilbert-base-uncased', num_labels=n_labels)
+    
+    tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+else:
+    # Load the tokenizer
+    tokenizer = BertTokenizer.from_pretrained('google-bert/bert-base-uncased')
+
+    # pass the pre-trained DistilBert to our define architecture
+    model = BertForSequenceClassification.from_pretrained('google-bert/bert-base-uncased', num_labels=n_labels)
+
 model.load_state_dict(torch.load(path, map_location=device))
 model.eval()
-tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
 pipe = pipeline('text-classification', model=model, tokenizer=tokenizer, device=device)
 
 

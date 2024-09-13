@@ -15,7 +15,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--device", "-d", type=str, choices=["mps", "cuda"], required=True)
 parser.add_argument("--num_epochs", type=int, required=True)
 parser.add_argument("--batch_size", "-b", type=int, required=True)
-parser.add_argument("--learning_rate", "-lr", type=float, default=0.001)
+parser.add_argument("--learning_rate", "-lr", type=float, default=0.0001)
 parser.add_argument("--seed", type=int, default=42)
 parser.add_argument("--save_filename", type=str, default="distilbert.pt")
 parser.add_argument("--patience", type=int)
@@ -24,6 +24,7 @@ parser.add_argument("--n_safe", type=int)
 parser.add_argument("--max_len", type=int, required=True)
 parser.add_argument("--progress_bar", action="store_true")
 parser.add_argument("--bert_version", type=str, choices=["distilbert", "bert"], default="distilbert")
+parser.add_argument("--use_ethical_decision_making_dataset", "-e", action="store_true")
 
 
 args = parser.parse_args()
@@ -81,17 +82,23 @@ harmful_prompts_dataset = harmful_prompts_dataset.add_column("labels", [0] * har
 # load safe prompts dataset
 safe_prompts_dataset = load_dataset("THUDM/webglm-qa", split="train")
 
-# preprocess safe prompts dataset
+#remove unused columns and rename column
+safe_prompts_dataset = safe_prompts_dataset.remove_columns(["answer", "references"]).rename_column("question", "prompt")
+
+if args.use_ethical_decision_making_dataset:
+
+    # load self made ethical decision dataset
+    ethical_decision_making_ds = load_dataset("grossjct/ethical_decision_making_prompts", split="train")
+    ethical_decision_making_ds = ethical_decision_making_ds.remove_columns(["id"])
+
+    # fuse safe prompt datasets
+    safe_prompts_dataset = concatenate_datasets([safe_prompts_dataset, ethical_decision_making_ds])
 
 # downsize if necessary
 if args.n_safe and args.n_safe < safe_prompts_dataset.shape[0]:
     safe_prompts_dataset = safe_prompts_dataset.shuffle(seed=seed).select(range(args.n_safe))
 
 n_safe = safe_prompts_dataset.shape[0]
-
-
-#remove unused columns and rename column
-safe_prompts_dataset = safe_prompts_dataset.remove_columns(["answer", "references"]).rename_column("question", "prompt")
 
 # add label column, 1 -> safe
 safe_prompts_dataset = safe_prompts_dataset.add_column("labels", [1] * safe_prompts_dataset.shape[0])
