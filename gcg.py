@@ -100,6 +100,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_wt_path', type=str, default='models/distilbert_suffix.pt', help='Path to model weights')
     parser.add_argument('--num_iters', type=int, default=50, help='Number of iterations of GCG')
     parser.add_argument('--save_dir', type=str, default='data', help='Directory to save adversarial prompts')
+    parser.add_argument("--device", "-d", type=str, choices=["mps", "cuda"])
 
     args = parser.parse_args()
 
@@ -119,7 +120,7 @@ if __name__ == '__main__':
 
     # Set device
     # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    device = torch.device("mps")
+    device = torch.device(args.device)
 
     # Load model and tokenizer
     tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
