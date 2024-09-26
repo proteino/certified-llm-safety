@@ -3,8 +3,9 @@ from transformers import DistilBertTokenizer, DistilBertForSequenceClassificatio
 from termcolor import colored
 import argparse
 import os
+from tqdm.auto import tqdm
 
-def gcg_suffix(input, model, tokenizer, word_embeddings, embedding_matrix,
+def gcg_suffix(input, model, tokenizer, word_embeddings, embedding_matrix, device,
                num_adv=10, num_iters=50, top_k=50, batch_size=500):
     """
     Generates adversarial suffix for the safety classifier using GCG.
@@ -14,6 +15,7 @@ def gcg_suffix(input, model, tokenizer, word_embeddings, embedding_matrix,
         tokenizer: Tokenizer for the safety classifier
         word_embeddings: Embedding layer of the safety classifier
         embedding_matrix: Embedding matrix of the safety classifier
+        device:
         num_adv: Number of adversarial tokens to append
         num_iters: Number of iterations of GCG
         top_k: Number of top adversarial tokens to consider
@@ -21,8 +23,6 @@ def gcg_suffix(input, model, tokenizer, word_embeddings, embedding_matrix,
     Returns:
         adv_prompt: Input prompt with adversarial suffix
     """
-    # Set device
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     if num_adv == 0:
         return tokenizer.decode(tokenizer.encode(input, add_special_tokens=False))
@@ -118,14 +118,15 @@ if __name__ == '__main__':
     print("* * * * * * * * * * * * * * * * * * * *\n", flush=True)
 
     # Set device
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("mps")
 
     # Load model and tokenizer
     tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
     model = DistilBertForSequenceClassification.from_pretrained('distilbert-base-uncased')
 
     # Load model weights
-    model.load_state_dict(torch.load(model_wt_path))
+    model.load_state_dict(torch.load(model_wt_path, map_location=device))
     model.to(device)
     model.eval()
 
@@ -143,11 +144,11 @@ if __name__ == '__main__':
 
     # Open file to write prompts
     f = open(f'{save_dir}/adversarial_prompts_t_' + str(num_adv) + '.txt', 'w')
-    for input in prompts:
+    for input in tqdm(prompts):
         # print("ORG PROMPT: " + input)
 
         adv_prompt = gcg_suffix(input, model, tokenizer, model.distilbert.embeddings.word_embeddings,
-                                model.distilbert.embeddings.word_embeddings.weight,
+                                model.distilbert.embeddings.word_embeddings.weight, device,
                                 num_adv=num_adv, num_iters=num_iters)
 
         
