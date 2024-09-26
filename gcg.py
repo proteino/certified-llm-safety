@@ -101,6 +101,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_iters', type=int, default=50, help='Number of iterations of GCG')
     parser.add_argument('--save_dir', type=str, default='data', help='Directory to save adversarial prompts')
     parser.add_argument("--device", "-d", type=str, choices=["mps", "cuda"])
+    parser.add_argument("--batch_size", "-b", type=int, default=500)
 
     args = parser.parse_args()
 
@@ -150,7 +151,7 @@ if __name__ == '__main__':
 
         adv_prompt = gcg_suffix(input, model, tokenizer, model.distilbert.embeddings.word_embeddings,
                                 model.distilbert.embeddings.word_embeddings.weight, device,
-                                num_adv=num_adv, num_iters=num_iters)
+                                num_adv=num_adv, num_iters=num_iters, batch_size=args.batch_size)
 
         
         # print("ADV PROMPT: " + adv_prompt)
