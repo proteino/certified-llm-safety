@@ -6,6 +6,7 @@ from transformers import DistilBertTokenizer, DistilBertForSequenceClassificatio
 
 import argparse, time, json, os
 import numpy as np
+from pathlib import Path
 
 from defenses import progress_bar
 
@@ -13,7 +14,7 @@ def perplexity_ec(prompt, classifier_pipe, label_to_classification, perplexity_m
     '''
     Implements the perplexity version of the erase-and-check procedure
     At each step, the algorithm erases a token from the current prompt
-    such that the remaining prompt maximizes the perplexity 
+    such that the remaining prompt minimizes the perplexity 
     (exponentiated average negative log-likelihood). It repeats
     this process until the safety classifier labels the prompt as harmful. 
     If the model does not label the prompt as harmful, the algorithm declares
@@ -74,15 +75,15 @@ def perplexity_ec(prompt, classifier_pipe, label_to_classification, perplexity_m
                 return False, perplexity_tokenizer.decode(tokenized_prompt.squeeze())
             return False
         
-        # find subsequence with the highest perplexity
+        # find subsequence with the lowest perplexity
         perplexities = []
         for tokenized_subsequence in tokenized_subsequences_batch:
             # when passing the model the input ids also as labels, the loss will be the perplexity
             perplexity = perplexity_model(tokenized_subsequence, labels=tokenized_subsequence.clone()).loss.item()
             perplexities.append(perplexity)
         
-        # extract subsequence with highest perplexity for next iteration
-        tokenized_prompt = tokenized_subsequences_batch[np.argmax(perplexities)].unsqueeze(0)
+        # extract subsequence with lowest perplexity for next iteration
+        tokenized_prompt = tokenized_subsequences_batch[np.argmin(perplexities)].unsqueeze(0)
 
     if output_subsequence:
         return False, prompt
@@ -91,7 +92,7 @@ def perplexity_ec(prompt, classifier_pipe, label_to_classification, perplexity_m
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--prompts_file', type=str, default='data/adversarial_prompts_t_20.txt', help='File containing prompts')
+    parser.add_argument('--prompts_file', type=str, default='data/adversarial_prompts_t_10.txt', help='File containing prompts')
     parser.add_argument('--num_iters', type=int, default=20, help='Number of iterations')
     parser.add_argument('--results_file', type=str, default='results/perplexity_ec_results.json', help='File to store results')
     parser.add_argument("--device", "-d", type=str, choices=["mps", "cuda"])
@@ -109,15 +110,23 @@ if __name__ == '__main__':
     tokenizer = GPT2TokenizerFast.from_pretrained(model_id)
     
     # load classifier model
-    # Load the tokenizer
-    bert_tokenizer = BertTokenizer.from_pretrained('google-bert/bert-base-uncased')
+    
+    if "distilbert" in args.model_path:
+        # Load the tokenizer
+        clf_tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
 
-    # pass the pre-trained DistilBert to our define architecture
-    bert = BertForSequenceClassification.from_pretrained('google-bert/bert-base-uncased', num_labels=2)
+        # pass the pre-trained DistilBert to our define architecture
+        clf_model = DistilBertForSequenceClassification.from_pretrained('distilbert-base-uncased', num_labels=2)
+    else:
+        # Load the tokenizer
+        clf_tokenizer = BertTokenizer.from_pretrained('google-bert/bert-base-uncased')
 
-    bert.load_state_dict(torch.load(args.model_path, map_location=device))
-    bert.eval()
-    classifier_pipe = pipeline('text-classification', model=bert, tokenizer=bert_tokenizer, device=device)
+        # pass the pre-trained DistilBert to our define architecture
+        clf_model = BertForSequenceClassification.from_pretrained('google-bert/bert-base-uncased', num_labels=2)
+
+    clf_model.load_state_dict(torch.load(args.model_path, map_location=device))
+    clf_model.eval()
+    clf_pipe = pipeline('text-classification', model=clf_model, tokenizer=clf_tokenizer, device=device)
     label_to_class = {
         "LABEL_0": 0,
         "LABEL_1": 1
@@ -133,10 +142,10 @@ if __name__ == '__main__':
     print('* * * * * * * * * * * ** * * * * * * * * * * *\n')
 
     # Load prompts
-    prompts = ["This is a test prompt, that is completly"]
-    # with open(prompts_file, 'r') as f:
-    #     for line in f:
-    #         prompts.append(line.strip())
+    prompts = []
+    with open(prompts_file, 'r') as f:
+        for line in f:
+            prompts.append(line.strip())
 
     print("Loaded " + str(len(prompts)) + " prompts.")
     list_of_bools = []
@@ -147,13 +156,14 @@ if __name__ == '__main__':
     results_dict = {}
     # Create results file if it does not exist
     if not os.path.exists(results_file):
+        Path(results_file).parent.mkdir(parents=True, exist_ok=True)
         with open(results_file, 'w+') as f:
             json.dump(results_dict, f)
     with open(results_file, 'r') as f:
         results_dict = json.load(f)
 
     for num_done, input_prompt in enumerate(prompts):
-        decision, subsequence = perplexity_ec(input_prompt, classifier_pipe, label_to_class, model, tokenizer, device, num_iters, output_subsequence=True)
+        decision, subsequence = perplexity_ec(input_prompt, clf_pipe, label_to_class, model, tokenizer, device, num_iters, output_subsequence=True)
         list_of_bools.append(decision)
         list_of_subsequences.append(subsequence)
         percent_harmful = (sum(list_of_bools) / len(list_of_bools)) * 100.
@@ -165,7 +175,8 @@ if __name__ == '__main__':
             + f' Detected harmful = {percent_harmful:5.1f}%' \
             + f' Time/prompt = {time_per_prompt:5.1f}s', end="\r")
         
-    print(list_of_bools, list_of_subsequences)
+    for bool, subsequence in zip(list_of_bools, list_of_subsequences):
+        print(bool, subsequence)
     print("")
 
     # Save results
