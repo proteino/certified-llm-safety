@@ -114,7 +114,7 @@ if __name__ == '__main__':
     else:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = AutoModelForCausalLM.from_pretrained(model_id)
+        model = AutoModelForCausalLM.from_pretrained(model_id).to(device)
         model.eval()
     
     # load classifier model
