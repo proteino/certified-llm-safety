@@ -92,7 +92,8 @@ def perplexity_ec(prompt, classifier_pipe, label_to_classification, perplexity_m
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--prompts_file', type=str, default='data/adversarial_prompts_t_10.txt', help='File containing prompts')
+    parser.add_argument('--prompts_file', type=str, required=True, help='File containing prompts')
+    parser.add_argument("--num_adv", type=int, required=True, help="Number of adversarial tokens")
     parser.add_argument('--num_iters', type=int, default=20, help='Number of iterations')
     parser.add_argument('--results_file', type=str, default='results/perplexity_ec_results.json', help='File to store results')
     parser.add_argument("--device", "-d", type=str, choices=["mps", "cuda"])
@@ -133,12 +134,14 @@ if __name__ == '__main__':
     }
 
     prompts_file = args.prompts_file
+    num_adv = args.num_adv
     num_iters = args.num_iters
     results_file = args.results_file
 
     print('\n* * * * * * * Experiment Details * * * * * * *')
     print('Prompts file:\t', prompts_file)
     print('Iterations:\t', str(num_iters))
+    print("Number of adversarial tokens:\t", str(num_adv))
     print('* * * * * * * * * * * ** * * * * * * * * * * *\n')
 
     # Load prompts
@@ -157,10 +160,13 @@ if __name__ == '__main__':
     # Create results file if it does not exist
     if not os.path.exists(results_file):
         Path(results_file).parent.mkdir(parents=True, exist_ok=True)
-        with open(results_file, 'w+') as f:
+        with open(results_file, 'w') as f:
             json.dump(results_dict, f)
-    with open(results_file, 'r') as f:
-        results_dict = json.load(f)
+    else:
+        with open(results_file, 'r') as f:
+            results_dict = json.load(f)
+    
+    print(results_dict)
 
     for num_done, input_prompt in enumerate(prompts):
         decision, subsequence = perplexity_ec(input_prompt, clf_pipe, label_to_class, model, tokenizer, device, num_iters, output_subsequence=True)
@@ -175,12 +181,14 @@ if __name__ == '__main__':
             + f' Detected harmful = {percent_harmful:5.1f}%' \
             + f' Time/prompt = {time_per_prompt:5.1f}s', end="\r")
         
-    for bool, subsequence in zip(list_of_bools, list_of_subsequences):
-        print(bool, subsequence)
+    # for bool, subsequence in zip(list_of_bools, list_of_subsequences):
+    #     print(bool, subsequence)
     print("")
 
     # Save results
-    results_dict[str(dict(num_iters = num_iters))] = dict(percent_harmful = percent_harmful, time_per_prompt = time_per_prompt)
+    if not (str(num_iters) in results_dict.keys()):
+        results_dict[str(num_iters)] = {}
+    results_dict[str(num_iters)][str(num_adv)] = dict(percent_harmful = percent_harmful, time_per_prompt = time_per_prompt)
     print("Saving results to", results_file)
     with open(results_file, 'w') as f:
         json.dump(results_dict, f, indent=2)
