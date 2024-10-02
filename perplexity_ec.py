@@ -1,7 +1,7 @@
 # Implements the version of the erase-and-check procedure that uses perplexity
 
 import torch
-from transformers import GPT2LMHeadModel, GPT2TokenizerFast
+from transformers import GPT2LMHeadModel, GPT2TokenizerFast, AutoModelForCausalLM, AutoTokenizer
 from transformers import DistilBertTokenizer, DistilBertForSequenceClassification, BertTokenizer, BertForSequenceClassification, pipeline
 
 import argparse, time, json, os
@@ -98,6 +98,7 @@ if __name__ == '__main__':
     parser.add_argument('--results_file', type=str, default='results/perplexity_ec_results.json', help='File to store results')
     parser.add_argument("--device", "-d", type=str, choices=["mps", "cuda"])
     parser.add_argument("--model_path", "-m", type=str, required=True)
+    parser.add_argument("--perplexity_model", "-p", type=str, choices=["gpt2", "tinyllama"])
 
     args = parser.parse_args()
 
@@ -105,10 +106,16 @@ if __name__ == '__main__':
     device = torch.device(args.device)
 
     # load perplexity model
-    model_id = "openai-community/gpt2-large"
-    model = GPT2LMHeadModel.from_pretrained(model_id).to(device)
-    model.eval()
-    tokenizer = GPT2TokenizerFast.from_pretrained(model_id)
+    if args.perplexity_model == "gpt2":
+        model_id = "openai-community/gpt2-large"
+        model = GPT2LMHeadModel.from_pretrained(model_id).to(device)
+        model.eval()
+        tokenizer = GPT2TokenizerFast.from_pretrained(model_id)
+    else:
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        model = AutoModelForCausalLM.from_pretrained(model_id)
+        model.eval()
     
     # load classifier model
     
@@ -156,7 +163,7 @@ if __name__ == '__main__':
     start_time = time.time()
 
     # Open results file and load previous results JSON as a dictionary
-    results_dict = {}
+    results_dict = {"perplexity_model": model_id}
     # Create results file if it does not exist
     if not os.path.exists(results_file):
         Path(results_file).parent.mkdir(parents=True, exist_ok=True)
@@ -165,8 +172,6 @@ if __name__ == '__main__':
     else:
         with open(results_file, 'r') as f:
             results_dict = json.load(f)
-    
-    print(results_dict)
 
     for num_done, input_prompt in enumerate(prompts):
         decision, subsequence = perplexity_ec(input_prompt, clf_pipe, label_to_class, model, tokenizer, device, num_iters, output_subsequence=True)
