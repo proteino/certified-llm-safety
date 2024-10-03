@@ -77,11 +77,16 @@ def perplexity_ec(prompt, classifier_pipe, label_to_classification, perplexity_m
         
         # find subsequence with the lowest perplexity
         perplexities = []
+        # make a one element batch out of every subsequence
+        tokenized_subsequences_batch = tokenized_subsequences_batch.unsqueeze(dim=1)
         for tokenized_subsequence in tokenized_subsequences_batch:
             # when passing the model the input ids also as labels, the loss will be the perplexity
+            
             perplexity = perplexity_model(tokenized_subsequence, labels=tokenized_subsequence.clone()).loss.item()
             perplexities.append(perplexity)
         
+        # revert one element batching from line 81
+        tokenized_subsequences_batch = tokenized_subsequences_batch.squeeze(dim=1)
         # extract subsequence with lowest perplexity for next iteration
         tokenized_prompt = tokenized_subsequences_batch[np.argmin(perplexities)].unsqueeze(0)
 

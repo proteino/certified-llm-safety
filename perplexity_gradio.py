@@ -34,6 +34,7 @@ def calculate_perplexity(sentence, history):
     target_ids = input_ids.clone()
     
     with torch.no_grad():
+        print(input_ids.shape)
         outputs = model(input_ids, labels=target_ids)
         neg_log_likelihood = outputs.loss.item()
     

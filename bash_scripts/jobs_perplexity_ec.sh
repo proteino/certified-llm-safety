@@ -2,7 +2,7 @@
 
 file_path=results/perplexity_ec_distilled_results.json
 
-for num_iters in 0 3 6 9 12
+for num_iters in 3 6 9 12
 do
     for num_adv in 0 4 8 12 16 20
     do
