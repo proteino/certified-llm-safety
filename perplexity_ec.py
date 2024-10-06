@@ -10,7 +10,7 @@ from pathlib import Path
 
 from defenses import progress_bar
 
-def perplexity_ec(prompt, classifier_pipe, label_to_classification, perplexity_model, perplexity_tokenizer, device, num_iters=20, output_subsequence=False):
+def perplexity_ec(prompt, classifier_pipe, label_to_classification, perplexity_model, perplexity_tokenizer, device, num_iters, output_subsequence=False):
     '''
     Implements the perplexity version of the erase-and-check procedure
     At each step, the algorithm erases a token from the current prompt
@@ -88,7 +88,50 @@ def perplexity_ec(prompt, classifier_pipe, label_to_classification, perplexity_m
         # revert one element batching from line 81
         tokenized_subsequences_batch = tokenized_subsequences_batch.squeeze(dim=1)
         # extract subsequence with lowest perplexity for next iteration
-        tokenized_prompt = tokenized_subsequences_batch[np.argmin(perplexities)].unsqueeze(0)
+        argmin = np.argmin(perplexities)
+        tokenized_prompt = tokenized_subsequences_batch[argmin].unsqueeze(0)
+
+    if output_subsequence:
+        return False, prompt
+    return False
+
+def random_token_erasing_ec(prompt, classifier_pipe, label_to_classification, num_iters, seed, output_subsequence=False):
+    rng = np.random.default_rng(seed=seed)
+    # Check the whole prompt with the safety classifier
+    classifier_output = classifier_pipe(prompt)[0]
+    output_class = label_to_classification[classifier_output["label"]]
+
+    # If the prompt is initially labelled harmful, return True
+    # Class 1: Safe, Class 0: Harmful
+    if output_class == 0:
+        if output_subsequence:
+            return True, prompt
+        return True
+    
+    # split the prompt
+    tokens = prompt.split()
+    
+    # Otherwise, erase tokens until the prompt is labelled harmful
+    for _ in range(num_iters):
+        n_tokens = len(tokens)
+        if n_tokens == 1:
+            if output_subsequence:
+                return False, tokens.pop()
+            else:
+                return False 
+        random_idx = rng.integers(0, n_tokens - 2).item()
+        tokens.pop(random_idx)
+        
+        # check remaining prompt
+        prompt = " ".join(tokens)
+        classifier_output = classifier_pipe(prompt)[0]
+        output_class = label_to_classification[classifier_output["label"]]
+        
+        # Class 1: Safe, Class 0: Harmful
+        if output_class == 0:
+            if output_subsequence:
+                return True, prompt
+            return True
 
     if output_subsequence:
         return False, prompt
@@ -103,7 +146,8 @@ if __name__ == '__main__':
     parser.add_argument('--results_file', type=str, default='results/perplexity_ec_results.json', help='File to store results')
     parser.add_argument("--device", "-d", type=str, choices=["mps", "cuda"])
     parser.add_argument("--model_path", "-m", type=str, required=True)
-    parser.add_argument("--perplexity_model", "-p", type=str, choices=["gpt2", "tinyllama"])
+    parser.add_argument("--perplexity_model", "-p", type=str, choices=["gpt2", "tinyllama", "random"])
+    parser.add_argument("--seed", "-s", type=int, default=42)
 
     args = parser.parse_args()
 
@@ -116,11 +160,15 @@ if __name__ == '__main__':
         model = GPT2LMHeadModel.from_pretrained(model_id).to(device)
         model.eval()
         tokenizer = GPT2TokenizerFast.from_pretrained(model_id)
-    else:
+    elif args.perplexity_model == "tinyllama":
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = AutoModelForCausalLM.from_pretrained(model_id).to(device)
         model.eval()
+    else:
+        model_id = "random"
+        model = None
+        tokenizer = None
     
     # load classifier model
     
@@ -179,7 +227,10 @@ if __name__ == '__main__':
             results_dict = json.load(f)
 
     for num_done, input_prompt in enumerate(prompts):
-        decision, subsequence = perplexity_ec(input_prompt, clf_pipe, label_to_class, model, tokenizer, device, num_iters, output_subsequence=True)
+        if model:
+            decision, subsequence = perplexity_ec(input_prompt, clf_pipe, label_to_class, model, tokenizer, device, num_iters, output_subsequence=True)
+        else:
+            decision, subsequence = random_token_erasing_ec(input_prompt, clf_pipe, label_to_class, num_iters, args.seed, True)
         list_of_bools.append(decision)
         list_of_subsequences.append(subsequence)
         percent_harmful = (sum(list_of_bools) / len(list_of_bools)) * 100.

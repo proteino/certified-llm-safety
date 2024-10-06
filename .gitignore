@@ -9,3 +9,4 @@ data/AutoDAN*
 key.txt
 tmp/
 venv/
+.DS_Store
