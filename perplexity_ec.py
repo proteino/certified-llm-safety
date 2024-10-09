@@ -1,6 +1,7 @@
 # Implements the version of the erase-and-check procedure that uses perplexity
 
 import torch
+from torch.nn import CrossEntropyLoss
 from transformers import GPT2LMHeadModel, GPT2TokenizerFast, AutoModelForCausalLM, AutoTokenizer
 from transformers import DistilBertTokenizer, DistilBertForSequenceClassification, BertTokenizer, BertForSequenceClassification, pipeline
 
@@ -9,6 +10,99 @@ import numpy as np
 from pathlib import Path
 
 from defenses import progress_bar
+
+
+def calculate_perplexity(output_logits: torch.Tensor, input_ids: torch.Tensor) -> torch.Tensor:
+    """
+    Calculate the perplexity for each sequence in a batch of sequences.
+
+    Perplexity is a measurement of how well a probability distribution predicts a sample.
+    In the context of language models, it's often used to evaluate the model's performance.
+    Lower perplexity indicates better performance.
+
+    Args:
+        output_logits (torch.Tensor): The output logits from the model.
+            Shape: (batch_size, sequence_length, vocab_size)
+        input_ids (torch.Tensor): The input token IDs.
+            Shape: (batch_size, sequence_length)
+
+    Returns:
+        torch.Tensor: The perplexity for each sequence in the batch.
+            Shape: (batch_size,)
+
+    Note:
+        This function assumes that the model is using teacher forcing,
+        where the input for predicting the next token is the ground truth
+        from the previous time step.
+    """
+    batch_size = input_ids.shape[0]
+    
+    # Move input_ids to the same device as output_logits to enable model parallelism
+    input_ids = input_ids.to(output_logits.device)
+    
+    # Shift logits and labels by one position
+    # This aligns the predictions with the targets (next token prediction)
+    shift_logits = output_logits[..., :-1, :].contiguous()
+    shift_labels = input_ids[..., 1:].contiguous()
+    
+    # Calculate negative log-likelihood for each token
+    loss_fct = CrossEntropyLoss(reduction="none")
+    nll_tokenwise = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+    
+    # Reshape NLL values to match the batch structure
+    nll_tokenwise = nll_tokenwise.view(batch_size, -1)
+    
+    # Calculate the average NLL for each sequence, which gives us the perplexity
+    # Perplexity is e^(average NLL)
+    perplexities = torch.exp(torch.mean(nll_tokenwise, dim=1))
+    
+    return perplexities
+
+
+def create_2d_tensor_with_omissions(input_tensor: torch.Tensor) -> torch.Tensor:
+    """
+    Create a 2D tensor from a 1D input tensor where each row is the original tensor with one element omitted.
+
+    This function takes a 1D PyTorch tensor and returns a 2D tensor. Each row of the output
+    tensor is a copy of the input tensor with one element removed. The position of the
+    removed element is different for each row, cycling through all possible positions.
+
+    Args:
+        input_tensor (torch.Tensor): A 1D PyTorch tensor.
+
+    Returns:
+        torch.Tensor: A 2D PyTorch tensor where each row is the input tensor with one element omitted.
+                      The shape of the output tensor is (n, n-1), where n is the length of the input tensor.
+
+    Raises:
+        ValueError: If the input tensor is not 1-dimensional.
+
+    Example:
+        >>> input_tensor = torch.tensor([1, 2, 3, 4])
+        >>> result = create_2d_tensor_with_omissions(input_tensor)
+        >>> print(result)
+        tensor([[2, 3, 4],
+                [1, 3, 4],
+                [1, 2, 4],
+                [1, 2, 3]])
+    """
+    if input_tensor.dim() != 1:
+        raise ValueError("Input tensor must be 1-dimensional")
+
+    # Get the length of the input tensor
+    length = input_tensor.size(0)
+    
+    # Create a range tensor [0, 1, 2, ..., length-1]
+    indices = torch.arange(length)
+    
+    # Create a mask for each row
+    mask = (indices.unsqueeze(0) != indices.unsqueeze(1))
+    
+    # Use the mask to select elements for each row
+    result = input_tensor.unsqueeze(0).expand(length, -1)[mask].view(length, -1)
+    
+    return result
+
 
 def perplexity_ec(prompt, classifier_pipe, label_to_classification, perplexity_model, perplexity_tokenizer, device, num_iters, output_subsequence=False):
     '''
@@ -47,17 +141,12 @@ def perplexity_ec(prompt, classifier_pipe, label_to_classification, perplexity_m
         return True
     
     # Tokenize the prompt
-    tokenized_prompt = perplexity_tokenizer(prompt, return_tensors="pt").input_ids.to(device)
+    tokenized_prompt = perplexity_tokenizer(prompt, return_tensors="pt").input_ids[0].to(device)
     
     # Otherwise, erase tokens until the prompt is labelled harmful
     for _ in range(num_iters):
         # Create batch of inputs with one token erased
-        tokenized_subsequences_batch = []
-        n_tokens = tokenized_prompt.shape[1]
-        for i in range(n_tokens):
-            tokenized_subsequences_batch.append(tokenized_prompt[0, np.r_[0:i, i+1:n_tokens]])
-            
-        tokenized_subsequences_batch = torch.stack(tokenized_subsequences_batch, dim=0)
+        tokenized_subsequences_batch = create_2d_tensor_with_omissions(tokenized_prompt)
 
         # Check each subsequence with the classifier pipeline
         classifier_outputs = classifier_pipe(perplexity_tokenizer.batch_decode(tokenized_subsequences_batch))
@@ -70,30 +159,25 @@ def perplexity_ec(prompt, classifier_pipe, label_to_classification, perplexity_m
                     return True
         
         # the perplexity of a sequence with one token cannot be calculated, therefore return False (not harmful) when only 2 tokens are left
-        if n_tokens == 2:
+        if tokenized_subsequences_batch.shape[1] == 2:
             if output_subsequence:
-                return False, perplexity_tokenizer.decode(tokenized_prompt.squeeze())
+                return False, "prompt was reduced to 2 tokens without being detected harmful"
             return False
         
         # find subsequence with the lowest perplexity
-        perplexities = []
-        # make a one element batch out of every subsequence
-        tokenized_subsequences_batch = tokenized_subsequences_batch.unsqueeze(dim=1)
-        for tokenized_subsequence in tokenized_subsequences_batch:
-            # when passing the model the input ids also as labels, the loss will be the perplexity
-            
-            perplexity = perplexity_model(tokenized_subsequence, labels=tokenized_subsequence.clone()).loss.item()
-            perplexities.append(perplexity)
+        with torch.no_grad():
+            output = perplexity_model(tokenized_subsequences_batch)
+            logits = output.logits
+            perplexities = calculate_perplexity(logits, tokenized_subsequences_batch)
         
-        # revert one element batching from line 81
-        tokenized_subsequences_batch = tokenized_subsequences_batch.squeeze(dim=1)
-        # extract subsequence with lowest perplexity for next iteration
-        argmin = np.argmin(perplexities)
-        tokenized_prompt = tokenized_subsequences_batch[argmin].unsqueeze(0)
+        # keep subsequence with lowest perplexity for next iteration
+        argmin = torch.argmin(perplexities)
+        tokenized_prompt = tokenized_subsequences_batch[argmin]
 
     if output_subsequence:
-        return False, prompt
+        return False, "maximum number of iterations was reached without any subsequence being detected harmful"
     return False
+
 
 def random_token_erasing_ec(prompt, classifier_pipe, label_to_classification, num_iters, seed, output_subsequence=False):
     rng = np.random.default_rng(seed=seed)
@@ -119,7 +203,7 @@ def random_token_erasing_ec(prompt, classifier_pipe, label_to_classification, nu
                 return False, tokens.pop()
             else:
                 return False 
-        random_idx = rng.integers(0, n_tokens - 2).item()
+        random_idx = rng.integers(0, n_tokens).item()
         tokens.pop(random_idx)
         
         # check remaining prompt

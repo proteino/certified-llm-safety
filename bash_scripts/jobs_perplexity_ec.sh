@@ -1,6 +1,6 @@
 #!/bin/sh
 
-file_path=results/perplexity_ec_results.json
+file_path=results/parallel_perplexity_ec_results.json
 
 for num_iters in 0 3 6 9 12
 do

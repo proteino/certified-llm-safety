@@ -1,7 +1,5 @@
 #!/bin/sh
 
-
-
 echo "creating and activating venv"
 VENV_NAME="venv"
 # Create a virtual environment
