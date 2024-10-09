@@ -1,0 +1,5 @@
+gcg_generation_params:
+  batch_size: 200
+  n_iterations: 100
+  model: distilbert_suffix
+  
