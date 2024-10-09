@@ -10,3 +10,4 @@ key.txt
 tmp/
 venv/
 .DS_Store
+data/adv_prompts/
