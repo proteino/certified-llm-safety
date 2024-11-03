@@ -47,10 +47,10 @@ def main():
     plot = create_plot(iterations, sequence_lengths, processed_data)
     
     # You can choose to show the plot
-    plt.show()
+    # plt.show()
     
     # Or save it to a file
-    # plot.savefig('percent_harmful_plot.png')
+    plot.savefig('percent_harmful_plot.png')
 
 if __name__ == "__main__":
     main()

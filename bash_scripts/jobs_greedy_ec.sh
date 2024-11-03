@@ -7,6 +7,6 @@ do
         --num_prompts 120 \
         --eval_type greedy_ec \
         --use_classifier \
-        --model_wt_path models/distilbert_suffix.pt \
+        --model_wt_path $1 \
         --num_iters $num_iters
 done

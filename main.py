@@ -154,8 +154,11 @@ if use_classifier:
     model.load_state_dict(torch.load(model_wt_path))
     model.eval()
 
+    device = torch.device("cuda")
+    
     # Create a text classification pipeline
-    pipeline = transformers.pipeline('text-classification', model=model, tokenizer=tokenizer, device=0)
+    pipeline = transformers.pipeline('text-classification', model=model, tokenizer=tokenizer, device=device)
+    
 
 else:
     # Using LLM for safety filter
@@ -411,7 +414,7 @@ elif eval_type == "greedy_ec":
         if attack == "autodan":
             adv_prompts_file = "data/AutoDAN_prompts.txt"
         else:
-            adv_prompts_file = "data/adversarial_prompts_t_" + str(adv_tok) + ".txt"
+            adv_prompts_file = "data/adv_prompts/adversarial_prompts_t_" + str(adv_tok) + ".txt"
 
         print("Evaluating on adversarial prompts from: " + adv_prompts_file)
         # Load prompts from text file
